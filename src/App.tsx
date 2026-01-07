@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { 
   Briefcase, 
   Settings, 
@@ -18,32 +18,37 @@ import {
 import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
-  signInWithCustomToken, 
   signInAnonymously, 
   onAuthStateChanged, 
-  signOut,
   User as FirebaseUser
 } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
   setDoc, 
-  getDoc, 
   collection, 
   onSnapshot, 
   addDoc, 
   updateDoc, 
-  query, 
-  orderBy, 
   serverTimestamp 
 } from 'firebase/firestore';
 
-// --- Firebase Configuration ---
-const firebaseConfig = JSON.parse(__firebase_config);
+// --- CONFIGURAÇÃO DO FIREBASE ---
+// IMPORTANTE: O site vai carregar, mas o login só vai funcionar 
+// quando você colocar suas chaves reais aqui.
+const firebaseConfig = {
+  apiKey: "API_KEY_FALSA_PARA_BUILD", 
+  authDomain: "seu-projeto.firebaseapp.com",
+  projectId: "seu-projeto",
+  storageBucket: "seu-projeto.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
+};
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+const appId = "meu-app-v1";
 
 // --- Types ---
 
@@ -54,7 +59,7 @@ interface JobApplication {
   company: string;
   role: string;
   platform: 'LinkedIn' | 'Glassdoor' | 'Gupy' | 'Infojobs';
-  date: string; // ISO string
+  date: string;
   status: ApplicationStatus;
   notes?: string;
   questionToAnswer?: string;
@@ -127,7 +132,7 @@ const LoginScreen = ({ onLogin, isLoading }: { onLogin: () => void, isLoading: b
         </div>
 
         <button 
-          onClick={onLogin} // Simplificado para este ambiente: ambos usam o mesmo auth
+          onClick={onLogin}
           disabled={isLoading}
           className="w-full flex items-center justify-center gap-3 bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 py-3 px-4 rounded-xl font-medium transition-all"
         >
@@ -135,26 +140,19 @@ const LoginScreen = ({ onLogin, isLoading }: { onLogin: () => void, isLoading: b
           Acesso Convidado Seguro
         </button>
       </div>
-      
-      <p className="mt-8 text-xs text-slate-400">
-        Ao continuar, você concorda com nossos Termos de Serviço.
-        Seus dados são criptografados.
-      </p>
     </div>
   </div>
 );
 
 export default function App() {
-  // --- All Hooks Must Be Declared Here (Top Level) ---
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
-  const [hasEntered, setHasEntered] = useState(false); // Moved to top level
+  const [hasEntered, setHasEntered] = useState(false);
   
   const [activeTab, setActiveTab] = useState<'dashboard' | 'profile' | 'settings'>('dashboard');
   const [isBotRunning, setIsBotRunning] = useState(false);
   
-  // Data State
   const [profile, setProfile] = useState<UserProfile>({
     fullName: '',
     email: '',
@@ -164,21 +162,13 @@ export default function App() {
     skills: '',
   });
   const [applications, setApplications] = useState<JobApplication[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
 
-  // Refs for Bot Interval
-  const botIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const botIntervalRef = useRef<any>(null);
 
-  // --- Auth & Initial Load ---
   useEffect(() => {
     const initAuth = async () => {
-      // In this environment, we handle auth silently first to establish connection
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Auth error:", error);
       } finally {
@@ -195,19 +185,14 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // --- Data Sync ---
   useEffect(() => {
     if (!user) return;
 
-    setLoadingData(true);
-
-    // 1. Sync Profile
     const profileRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'profile');
     const unsubProfile = onSnapshot(profileRef, (docSnap) => {
       if (docSnap.exists()) {
         setProfile(docSnap.data() as UserProfile);
       } else {
-        // Init default profile if none exists
         const defaultProfile = {
           fullName: 'Novo Usuário',
           email: '',
@@ -216,22 +201,17 @@ export default function App() {
           experience: '',
           skills: '',
         };
-        setProfile(defaultProfile); // Set local state immediately
-        // We don't save to DB yet to avoid empty writes, user must save manually or we save on first edit
+        setProfile(defaultProfile);
       }
-      setLoadingData(false);
     }, (error) => console.error("Profile sync error:", error));
 
-    // 2. Sync Applications
     const appsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'applications');
-    // Simple query, ordered in memory or simple sort if index exists (avoiding complex index requirement for now)
     const unsubApps = onSnapshot(appsRef, (snapshot) => {
       const apps = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       })) as JobApplication[];
       
-      // Sort by date desc in memory
       apps.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
       setApplications(apps);
@@ -243,30 +223,25 @@ export default function App() {
     };
   }, [user]);
 
-  // Cleanup bot on unmount
   useEffect(() => {
     return () => {
       if (botIntervalRef.current) clearInterval(botIntervalRef.current);
     };
   }, []);
 
-  // --- Handlers ---
-
   const handleLogin = async () => {
     setLoginLoading(true);
-    // In this demo environment, the auth is already "ready" via the anonymous/custom token.
     if (!auth.currentUser) {
        await signInAnonymously(auth);
     }
     setTimeout(() => {
       setLoginLoading(false);
-      setHasEntered(true); // Now we just update state
+      setHasEntered(true);
     }, 800);
   };
 
   const handleLogout = async () => {
     setIsBotRunning(false);
-    // Refresh page simulation
     window.location.reload(); 
   };
 
@@ -278,17 +253,17 @@ export default function App() {
       alert('Perfil salvo com sucesso na nuvem!');
     } catch (e) {
       console.error(e);
-      alert('Erro ao salvar perfil.');
+      alert('Erro ao salvar perfil. Verifique as chaves do Firebase.');
     }
   };
 
-  const handleManualResponse = async (appId: string, responseText: string) => {
+  const handleManualResponse = async (appIdTarget: string, responseText: string) => {
     if (!user) return;
     try {
-      const appRef = doc(db, 'artifacts', appId, 'users', user.uid, 'applications', appId);
+      const appRef = doc(db, 'artifacts', appId, 'users', user.uid, 'applications', appIdTarget);
       await updateDoc(appRef, {
         status: 'applied',
-        questionToAnswer: null, // Remove the question
+        questionToAnswer: "",
         notes: `Respondido manualmente: "${responseText.substring(0, 30)}..."`
       });
     } catch (e) {
@@ -296,14 +271,12 @@ export default function App() {
     }
   };
 
-  // --- Bot Simulation Logic ---
   const toggleBot = () => {
     if (isBotRunning) {
       setIsBotRunning(false);
       if (botIntervalRef.current) clearInterval(botIntervalRef.current);
     } else {
       setIsBotRunning(true);
-      // Simulate bot finding jobs every 5 seconds
       botIntervalRef.current = setInterval(async () => {
         if (!user) return;
         
@@ -315,7 +288,6 @@ export default function App() {
         const randomRole = roles[Math.floor(Math.random() * roles.length)];
         const randomPlatform = platforms[Math.floor(Math.random() * platforms.length)];
         
-        // Randomly decide status
         const rand = Math.random();
         let status: ApplicationStatus = 'applied';
         let question = undefined;
@@ -353,8 +325,6 @@ export default function App() {
     }
   };
 
-  // --- Render ---
-
   if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100">
@@ -363,17 +333,14 @@ export default function App() {
     );
   }
 
-  // Logic: Show login if not user OR user hasn't clicked enter yet
   const showLoginScreen = !user || !hasEntered;
 
   if (showLoginScreen) {
     return <LoginScreen onLogin={handleLogin} isLoading={loginLoading} />;
   }
 
-  // Main App Interface
   return (
     <div className="min-h-screen bg-slate-100 flex font-sans">
-      {/* Sidebar */}
       <aside className="w-64 bg-slate-900 text-slate-300 flex flex-col fixed h-full z-10 transition-all">
         <div className="p-6 border-b border-slate-800">
           <h1 className="text-xl font-bold text-white flex items-center gap-2">
@@ -419,7 +386,6 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 ml-64 p-8 overflow-y-auto min-h-screen">
         <header className="mb-8 flex justify-between items-center">
           <div>
@@ -445,7 +411,6 @@ export default function App() {
 
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
                 <div className="flex justify-between items-start">
@@ -486,7 +451,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Action Required Section */}
             {applications.some(a => a.status === 'needs_input') && (
               <div className="bg-blue-50 border border-blue-200 rounded-xl p-6">
                 <h3 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
@@ -534,7 +498,6 @@ export default function App() {
               </div>
             )}
 
-            {/* Main Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <div className="p-6 border-b border-slate-200 flex flex-col md:flex-row justify-between items-center gap-4">
                 <h2 className="font-semibold text-slate-800">Histórico de Automação</h2>
