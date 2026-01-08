@@ -4,11 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AutoJob</title>
-    <!-- ADICIONANDO A TINTA CORRETA (Tailwind v3 via CDN) -->
+    <!-- Importando Tailwind via CDN de forma segura para evitar bloqueios -->
     <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              linkedin: '#0077b5',
+            }
+          }
+        }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/App.tsx"></script>
+    <!-- O PULO DO GATO: O caminho precisa ter o ponto no início para funcionar no GitHub Pages -->
+    <script type="module" src="./src/App.tsx"></script>
   </body>
 </html>
