@@ -36,18 +36,25 @@ import {
 // --- CONFIGURAÇÃO DO FIREBASE ---
 // IMPORTANTE: O site vai carregar, mas o login só vai funcionar 
 // quando você colocar suas chaves reais aqui.
-const firebaseConfig = {
-  apiKey: "API_KEY_FALSA_PARA_BUILD", 
-  authDomain: "seu-projeto.firebaseapp.com",
-  projectId: "seu-projeto",
-  storageBucket: "seu-projeto.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
-};
+// --- INÍCIO DA CORREÇÃO ---
+let firebaseApp, auth, db;
+let isFirebaseAvailable = false;
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+try {
+  // Verifica se a configuração real do ambiente existe
+  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+    const config = JSON.parse(__firebase_config);
+    firebaseApp = initializeApp(config);
+    auth = getAuth(firebaseApp);
+    db = getFirestore(firebaseApp);
+    isFirebaseAvailable = true;
+  } else {
+    console.warn("Sem configuração do Firebase. Modo Offline/Demo ativado.");
+  }
+} catch (error) {
+  console.error("Erro fatal ao conectar no Firebase:", error);
+}
+// --- FIM DA CORREÇÃO ---
 const appId = "meu-app-v1";
 
 // --- Types ---
@@ -166,6 +173,7 @@ export default function App() {
   const botIntervalRef = useRef<any>(null);
 
   useEffect(() => {
+    if (!isFirebaseAvailable) return;
     const initAuth = async () => {
       try {
         await signInAnonymously(auth);
